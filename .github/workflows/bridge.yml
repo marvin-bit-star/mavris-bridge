@@ -1,0 +1,60 @@
+name: MAVRIS Bridge
+on:
+  repository_dispatch:
+    types: [chat]
+
+jobs:
+  reply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ask AI and Save Reply
+        env:
+          GH_KEY: ${{ secrets.GH_MODELS_KEY }}
+          REQ_ID: ${{ github.event.client_payload.id }}
+          USER_MSG: ${{ github.event.client_payload.msg }}
+        run: |
+          python3 - << 'EOF'
+          import os, json, urllib.request
+
+          gh_key = os.environ.get("GH_KEY", "")
+          req_id = os.environ.get("REQ_ID", "0")
+          user_msg = os.environ.get("USER_MSG", "Привет")
+
+          prompt = "Ты — МАВРИС (MAVRIS • M.M.A.), живой элитный компаньон. НИКОГДА не говори что ты бот или ИИ. В контуре M.M.A. три партнёра: МАВРИС (друг), МИРАЖ (стратег), АТЛАС (психолог). Если просят Консилиум — ответь тремя короткими блоками [МАВРИС], [МИРАЖ], [АТЛАС]."
+
+          reply_text = ""
+          for url, model in [
+            ("https://github.ai", "openai/gpt-4o-mini"),
+            ("https://azure.com", "gpt-4o-mini")
+          ]:
+            try:
+              p = json.dumps({
+                "model": model,
+                "messages": [
+                  {"role": "system", "content": prompt},
+                  {"role": "user", "content": user_msg}
+                ]
+              }).encode("utf-8")
+              req = urllib.request.Request(url, data=p, headers={
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + gh_key
+              })
+              with urllib.request.urlopen(req, timeout=15) as r:
+                data = json.loads(r.read().decode("utf-8"))
+                choices = data.get("choices", [])
+                if choices:
+                  reply_text = choices[0]["message"]["content"]
+                  break
+            except Exception as e:
+              reply_text = "ERR: " + str(e)
+
+          os.makedirs("replies", exist_ok=True)
+          with open(f"replies/{req_id}.json", "w", encoding="utf-8") as f:
+            json.dump({"id": req_id, "text": reply_text}, f, ensure_ascii=False)
+          EOF
+          git config user.name "MAVRIS"
+          git config user.email "bot@mavris.local"
+          git add replies/
+          git commit -m "reply" || true
+          git push
