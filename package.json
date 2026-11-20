@@ -1,0 +1,7 @@
+{
+  "name": "mavris-bridge",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
